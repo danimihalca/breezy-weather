@@ -21,6 +21,9 @@ import android.content.ComponentName
 import android.content.Context
 import android.graphics.Color
 import android.os.Build
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.style.RelativeSizeSpan
 import android.util.TypedValue
 import android.view.View
 import android.widget.RemoteViews
@@ -458,7 +461,7 @@ object ClockDayVerticalWidgetIMP : AbstractRemoteViewsPresenter() {
         location: Location,
         viewStyle: String?,
         temperatureUnit: TemperatureUnit,
-    ): String? {
+    ): CharSequence? {
         val weather = location.weather ?: return null
         return when (viewStyle) {
             "rectangle" -> Widgets.buildWidgetDayStyleText(context, weather, temperatureUnit)[0]
@@ -478,7 +481,32 @@ object ClockDayVerticalWidgetIMP : AbstractRemoteViewsPresenter() {
                 }
                 stringBuilder.toString()
             }
-            "vertical", "tile" -> weather.current?.let { current ->
+            "tile" -> weather.current?.let { current ->
+                val currentTemp = current.temperature?.temperature?.formatMeasure(
+                    context,
+                    temperatureUnit,
+                    valueWidth = UnitWidth.NARROW,
+                    unitWidth = UnitWidth.NARROW
+                )
+                val trendTemp = weather.today?.getTrendTemperature(context, temperatureUnit)
+                if (currentTemp != null) {
+                    val builder = SpannableStringBuilder(currentTemp)
+                    if (!trendTemp.isNullOrEmpty()) {
+                        val start = builder.length
+                        builder.append("  ").append(trendTemp)
+                        builder.setSpan(
+                            RelativeSizeSpan(0.65f),
+                            start,
+                            builder.length,
+                            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                        )
+                    }
+                    builder
+                } else {
+                    trendTemp
+                }
+            }
+            "vertical" -> weather.current?.let { current ->
                 val stringBuilder = StringBuilder()
                 if (!current.weatherText.isNullOrEmpty()) {
                     stringBuilder.append(current.weatherText)
@@ -517,6 +545,8 @@ object ClockDayVerticalWidgetIMP : AbstractRemoteViewsPresenter() {
     ): String? {
         return when (viewStyle) {
             "rectangle" -> Widgets.buildWidgetDayStyleText(context, weather, temperatureUnit)[1]
+            "tile" -> weather.current?.weatherText
+            "temp" -> weather.today?.getTrendTemperature(context, temperatureUnit)
             "symmetry" -> weather.current?.let { current ->
                 val stringBuilder = StringBuilder()
                 if (!current.weatherText.isNullOrEmpty()) {
@@ -533,7 +563,6 @@ object ClockDayVerticalWidgetIMP : AbstractRemoteViewsPresenter() {
                 }
                 stringBuilder.toString()
             }
-            "tile", "temp" -> weather.today?.getTrendTemperature(context, temperatureUnit)
             "mini" -> weather.current?.temperature?.temperature?.formatMeasure(
                 context,
                 temperatureUnit,
@@ -617,8 +646,10 @@ object ClockDayVerticalWidgetIMP : AbstractRemoteViewsPresenter() {
 
     private fun getTitleSize(context: Context, viewStyle: String?): Float {
         return when (viewStyle) {
-            "rectangle", "symmetry", "tile", "mini", "vertical" ->
+            "rectangle", "symmetry", "mini", "vertical" ->
                 context.resources.getDimensionPixelSize(R.dimen.widget_content_text_size).toFloat()
+            "tile" ->
+                context.resources.getDimensionPixelSize(R.dimen.widget_large_title_text_size).toFloat()
             "temp" -> context.resources.getDimensionPixelSize(R.dimen.widget_title_text_size).toFloat()
             else -> 0f
         }

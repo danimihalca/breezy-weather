@@ -21,6 +21,9 @@ import android.content.ComponentName
 import android.content.Context
 import android.graphics.Color
 import android.os.Build
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.style.RelativeSizeSpan
 import android.util.TypedValue
 import android.view.View
 import android.widget.RemoteViews
@@ -291,6 +294,9 @@ object DayWeekWidgetIMP : AbstractRemoteViewsPresenter() {
             }
         }
         if (textSize != 100) {
+            val titleSize = context.resources.getDimensionPixelSize(
+                if (viewStyle == "tile") R.dimen.widget_large_title_text_size else R.dimen.widget_content_text_size
+            ).toFloat().times(textSize).div(100f)
             val contentSize = context.resources.getDimensionPixelSize(R.dimen.widget_content_text_size).toFloat()
                 .times(textSize)
                 .div(100f)
@@ -298,11 +304,12 @@ object DayWeekWidgetIMP : AbstractRemoteViewsPresenter() {
                 .times(textSize)
                 .div(100f)
             views.apply {
-                setTextViewTextSize(R.id.widget_day_week_title, TypedValue.COMPLEX_UNIT_PX, contentSize)
+                setTextViewTextSize(R.id.widget_day_week_title, TypedValue.COMPLEX_UNIT_PX, titleSize)
                 setTextViewTextSize(R.id.widget_day_week_subtitle, TypedValue.COMPLEX_UNIT_PX, contentSize)
                 setTextViewTextSize(R.id.widget_day_week_time, TypedValue.COMPLEX_UNIT_PX, timeSize)
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                     // Introduced in Android 9, but remotable view method only since Android 12
+                    setInt(R.id.widget_day_week_title, "setLineHeight", titleSize.roundToInt())
                     setInt(R.id.widget_day_week_subtitle, "setLineHeight", contentSize.roundToInt())
                 }
             }
@@ -322,7 +329,7 @@ object DayWeekWidgetIMP : AbstractRemoteViewsPresenter() {
         location: Location,
         viewStyle: String?,
         temperatureUnit: TemperatureUnit,
-    ): String? {
+    ): CharSequence? {
         val weather = location.weather ?: return null
         return when (viewStyle) {
             "rectangle" -> Widgets.buildWidgetDayStyleText(context, weather, temperatureUnit)[0]
@@ -343,24 +350,29 @@ object DayWeekWidgetIMP : AbstractRemoteViewsPresenter() {
                 stringBuilder.toString()
             }
             "tile" -> weather.current?.let { current ->
-                val stringBuilder = StringBuilder()
-                if (!current.weatherText.isNullOrEmpty()) {
-                    stringBuilder.append(current.weatherText)
-                }
-                current.temperature?.temperature?.let {
-                    if (stringBuilder.isNotEmpty()) {
-                        stringBuilder.append(" ")
-                    }
-                    stringBuilder.append(
-                        it.formatMeasure(
-                            context,
-                            temperatureUnit,
-                            valueWidth = UnitWidth.NARROW,
-                            unitWidth = UnitWidth.NARROW
+                val currentTemp = current.temperature?.temperature?.formatMeasure(
+                    context,
+                    temperatureUnit,
+                    valueWidth = UnitWidth.NARROW,
+                    unitWidth = UnitWidth.NARROW
+                )
+                val trendTemp = weather.today?.getTrendTemperature(context, temperatureUnit)
+                if (currentTemp != null) {
+                    val builder = SpannableStringBuilder(currentTemp)
+                    if (!trendTemp.isNullOrEmpty()) {
+                        val start = builder.length
+                        builder.append("  ").append(trendTemp)
+                        builder.setSpan(
+                            RelativeSizeSpan(0.65f),
+                            start,
+                            builder.length,
+                            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
                         )
-                    )
+                    }
+                    builder
+                } else {
+                    trendTemp
                 }
-                return stringBuilder.toString()
             }
             else -> null
         }
@@ -374,7 +386,7 @@ object DayWeekWidgetIMP : AbstractRemoteViewsPresenter() {
     ): String? {
         return when (viewStyle) {
             "rectangle" -> Widgets.buildWidgetDayStyleText(context, weather, temperatureUnit)[1]
-            "tile" -> weather.today?.getTrendTemperature(context, temperatureUnit)
+            "tile" -> weather.current?.weatherText
             "symmetry" -> weather.current?.let { current ->
                 val stringBuilder = StringBuilder()
                 if (!current.weatherText.isNullOrEmpty()) {
